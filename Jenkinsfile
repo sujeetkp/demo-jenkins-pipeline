@@ -3,8 +3,7 @@ pipeline {
         label 'linux'
     }
     environment{
-        CLIENT_ID=credentials('client-id')
-        PASSWORD=credentials('client-secret')
+        ACTION='Deploy'
     }
     stages {
         stage('Install'){
@@ -38,6 +37,12 @@ pipeline {
             '''
         }
         stage('Terraform Deploy') {
+            environment{
+                ARM_CLIENT_ID=credentials('arm-cleint-id')
+                ARM_SUBSCRIPTION_ID=credentials('arm-subscription-id')
+                ARM_TENANT_ID=credentials('arm-tenant-id')
+                ARM_CLIENT_SECRET=credentials('arm-client-secret')
+            }
             steps {
                 echo 'Deploying terraform code ..'
                 sh '''
@@ -53,6 +58,10 @@ pipeline {
             }
         }
         stage('Kubernetes Deploy') {
+            environment{
+                CLIENT_ID=credentials('client-id')
+                PASSWORD=credentials('client-secret')
+            }
             steps {
                 echo 'Deploying k8s manifests..'
                 sh '''
