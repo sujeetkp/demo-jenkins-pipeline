@@ -2,26 +2,73 @@ pipeline {
     agent {
         label 'linux'
     }
-
+    environment{
+        CLIENT_ID=credentials('client-id')
+        PASSWORD=credentials('client-secret')
+    }
     stages {
-        stage('Build') {
+        stage('Install'){
+            echo 'Installing Dependencies !!'
+            
+            sh '''
+            # Install Terraform
+            sudo wget https://releases.hashicorp.com/terraform/"$TERRAFORM_VERSION"/terraform_"$TERRAFORM_VERSION"_linux_amd64.zip -o terraform_linux_amd64.zip
+            sudo unzip terraform_linux_amd64.zip
+            sudo mv terraform /usr/local/bin/
+
+            # Install kubectl
+            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+            # Install az cli
+            sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+
+            echo -e "[azure-cli]
+            name=Azure CLI
+            baseurl=https://packages.microsoft.com/yumrepos/azure-cli
+            enabled=1
+            gpgcheck=1
+            gpgkey=https://packages.microsoft.com/keys/microsoft.asc" | sudo tee /etc/yum.repos.d/azure-cli.repo
+
+            sudo dnf install azure-cli
+
+            # Install kubelogin
+            az aks install-cli
+            
+            '''
+        }
+        stage('Terraform Deploy') {
             steps {
-                echo 'Building..'
+                echo 'Deploying terraform code ..'
                 sh '''
                 hostname
                 date
                 ls -lrt
+                cd terraform/
+                terraform init
+                terraform validate
+                terraform plan
+                terraform apply -auto-approve
                 '''
             }
         }
-        stage('Test') {
+        stage('Kubernetes Deploy') {
             steps {
-                echo 'Testing..'
+                echo 'Deploying k8s manifests..'
+                sh '''
+                az login --service-principal -u $CLIENT_ID -p $PASSWORD
+                az account set --subscription 29f4fd39-55c5-46f0-9e75-d9d16df4f544
+                az aks get-credentials --resource-group Training --name demo
+                kubelogin convert-kubeconfig -l azurecli
+
+                cd Kubernetes/
+                kubectl apply -f .
+                '''
             }
         }
-        stage('Deploy') {
+        stage('Post Deploy') {
             steps {
-                echo 'Deploying....'
+                echo 'Deployment is Complete !!'
             }
         }
     }
